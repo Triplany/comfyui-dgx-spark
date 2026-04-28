@@ -1,33 +1,7 @@
 # comfyui-dgx-spark
 
 ComfyUI that just works on the NVIDIA DGX Spark (GB10, sm_121, aarch64).
-
-## Install
-
-```bash
-git clone https://github.com/Triplany/comfyui-dgx-spark
-cd comfyui-dgx-spark
-
-# Default expects ComfyUI at $HOME/ComfyUI with venv at .venv inside it.
-# Override with COMFY=... if your install is elsewhere.
-bash install.sh
-
-# Confirm everything is healthy:
-bash verify.sh
-
-# Start ComfyUI:
-bash $HOME/ComfyUI/run_dgx_spark.sh
-```
-
-That's it. After the launcher starts, expect these in the log:
-
-```
-Using sage attention
-aimdo: comfy-aimdo inited for GPU: NVIDIA GB10 (VRAM: 124546 MB)
-DynamicVRAM support detected and enabled
-Starting server
-To see the GUI go to: http://0.0.0.0:8188
-```
+** DOES NOT INSTALL COMFYUI. ONLY UPDATES EXISTING **
 
 ## Why this exists
 
@@ -89,6 +63,34 @@ source $HOME/ComfyUI/.venv/bin/activate
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu130
 ```
 
+## Install
+
+```bash
+git clone https://github.com/Triplany/comfyui-dgx-spark
+cd comfyui-dgx-spark
+
+# Default expects ComfyUI at $HOME/ComfyUI with venv at .venv inside it.
+# Override with COMFY=... if your install is elsewhere.
+bash install.sh
+
+# Confirm everything is healthy:
+bash verify.sh
+
+# Start ComfyUI:
+bash $HOME/ComfyUI/run_dgx_spark.sh
+```
+
+That's it. After the launcher starts, expect these in the log:
+
+```
+Using sage attention
+aimdo: comfy-aimdo inited for GPU: NVIDIA GB10 (VRAM: 124546 MB)
+DynamicVRAM support detected and enabled
+Starting server
+To see the GUI go to: http://0.0.0.0:8188
+```
+
+
 ### Tested on
 
 Verified working with these exact versions. Newer likely works too; documented for reproducibility.
@@ -108,7 +110,6 @@ Verified working with these exact versions. Newer likely works too; documented f
 | SageAttention | 2.2.0 (rebuilt for sm_121 native kernels) |
 | onnxruntime-gpu | 1.25.0 (Jay0515 sm_121/aarch64/cu13 wheel) |
 
-Workloads exercised end-to-end on this stack: **Flux1 + LoRA**, **Flux2**, **Qwen 2512**, **Wan 2.2 14B T2V** (training and inference), **LTX 2.3 T2V/I2V** (with audio), **DWPose preprocessing**, and stacked **Flux + ControlNet + LoRA + upscale + DWPose** workflows.
 
 ---
 
