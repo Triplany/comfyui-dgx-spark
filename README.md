@@ -1,6 +1,7 @@
 # comfyui-dgx-spark
 
 ComfyUI that just works on the NVIDIA DGX Spark (GB10, sm_121, aarch64).
+
 ** DOES NOT INSTALL COMFYUI. ONLY UPDATES EXISTING **
 
 ## Why this exists
