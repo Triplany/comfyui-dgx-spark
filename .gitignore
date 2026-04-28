@@ -1,0 +1,22 @@
+# Build artifacts
+/tmp/
+*.pyc
+__pycache__/
+*.egg-info/
+
+# Python venvs (this repo doesn't ship one)
+.venv/
+venv/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Scratch / personal
+NOTES.local.md
+*.local
