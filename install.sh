@@ -9,8 +9,8 @@
 #   2. build/opencv.sh         — fix opencv 3-way conflict
 #   3. build/onnxruntime.sh    — install community sm_121 wheel
 #   4. build/sage.sh           — verify SageAttention has sm_121 native, rebuild if not
-#   5. build/aimdo.sh          — build comfy-aimdo aimdo.so for aarch64
-#   6. dgx_spark_patches.sh    — apply 3 ComfyUI source patches (idempotent)
+#   5. build/aimdo.sh          — install comfy-aimdo ≥ v0.3.0 (PyPI aarch64 wheel)
+#   6. dgx_spark_patches.sh    — apply ComfyUI source patches (idempotent, version-aware)
 #   7. install run_dgx_spark.sh — copy launcher template into ComfyUI dir if missing
 #
 # What this does NOT do:
@@ -81,6 +81,57 @@ if ! echo "$TORCH_INFO" | sed -n '4p' | grep -q "12, 1"; then
     echo "[install] WARN: GPU compute capability is not (12, 1) — this script is for DGX Spark / GB10." >&2
 fi
 
+# Detect ComfyUI commit + which patches will apply / skip on this tree.
+# Mirrors the ancestor checks inside dgx_spark_patches.sh so the user sees the
+# decision up front before any work begins.
+if [ -d "$COMFY/.git" ]; then
+    COMFY_HEAD=$(git -C "$COMFY" rev-parse HEAD 2>/dev/null || echo "(unknown)")
+    echo "[install] ComfyUI HEAD: ${COMFY_HEAD:0:12}"
+
+    # Recommended target: master @ b6332446 (2026-04-30) or newer.
+    # That's the commit this kit's detection logic is validated against.
+    RECOMMENDED_COMMIT="b6332446"
+    MODERN=0
+    if git -C "$COMFY" merge-base --is-ancestor "$RECOMMENDED_COMMIT" HEAD 2>/dev/null; then
+        echo "[install]   ✓ at or past recommended commit $RECOMMENDED_COMMIT (2026-04-30)"
+        MODERN=1
+    elif git -C "$COMFY" merge-base --is-ancestor 9d8a8179 HEAD 2>/dev/null; then
+        echo "[install]   PARTIAL: past async-offload PR (#10953) but pre-recommended commit ($RECOMMENDED_COMMIT)."
+        echo "[install]              Some legacy patches may still apply. \`git pull\` recommended."
+    else
+        echo "[install]   LEGACY: pre-async-offload (pre-#10953, 2025-11-27)."
+        echo "[install]              Kit will apply legacy memory-bookkeeping patches."
+        echo "[install]              Strongly recommend updating ComfyUI: \`git pull\` then re-run this installer."
+    fi
+
+    # Patch 1: PR #10953 (commit 9d8a8179, 2025-11-27) — async offload by default
+    if git -C "$COMFY" merge-base --is-ancestor 9d8a8179 HEAD 2>/dev/null; then
+        echo "[install]   Patch 1 (mem_get_info → psutil): SKIP — upstream PR #10953 addresses this. Override with FORCE_LEGACY_PATCH1=1."
+    else
+        echo "[install]   Patch 1 (mem_get_info → psutil): apply (pre-PR #10953)"
+    fi
+
+    # Patch 3: PR #13486 (commit ad94d472, 2026-04-21) — audio VAE refactor removed target
+    if [ ! -f "$COMFY/comfy/ldm/lightricks/vae/audio_vae.py" ] || \
+       ! grep -q "def ensure_model_loaded" "$COMFY/comfy/ldm/lightricks/vae/audio_vae.py" 2>/dev/null; then
+        echo "[install]   Patch 3 (audio VAE eviction): SKIP — upstream PR #13486 removed the target"
+    else
+        echo "[install]   Patch 3 (audio VAE eviction): apply"
+    fi
+
+    echo "[install]   Patch 2 (LTX NaN audio clamp): apply — defensive guard for upstream Lightricks LTX bug; keeps stacking until that's fixed"
+
+    # comfy-aimdo v0.3.0 integration came in PR #13604 (commit e514119e, 2026-04-29), post-v0.20.1.
+    # Older trees pin to comfy-aimdo 0.2.x; the install.sh aimdo step will install >=0.3.0 anyway,
+    # but the import path may differ on legacy ComfyUI. Note for users on older trees.
+    if [ "$MODERN" = "0" ] && grep -q "comfy-aimdo" "$COMFY/requirements.txt" 2>/dev/null; then
+        AIMDO_PIN=$(awk -F'==' '/^comfy-aimdo/{print $2}' "$COMFY/requirements.txt" | head -1)
+        if [ -n "$AIMDO_PIN" ] && [ "$AIMDO_PIN" != "0.3.0" ] && [ "${AIMDO_PIN%%.*}" = "0" ] && [ "$(echo "$AIMDO_PIN" | cut -d. -f2)" -lt 3 ] 2>/dev/null; then
+            echo "[install]   NOTE: ComfyUI requirements.txt pins comfy-aimdo==$AIMDO_PIN. Kit will upgrade to >=0.3.0."
+        fi
+    fi
+fi
+
 echo ""
 echo "================================================================"
 echo " Step 1/7 — imageio-ffmpeg"
@@ -107,7 +158,7 @@ bash "$REPO_DIR/build/sage.sh"
 
 echo ""
 echo "================================================================"
-echo " Step 5/7 — comfy-aimdo aarch64 build (DynamicVRAM)"
+echo " Step 5/7 — comfy-aimdo install (PyPI aarch64 wheel, DynamicVRAM)"
 echo "================================================================"
 bash "$REPO_DIR/build/aimdo.sh"
 
@@ -151,10 +202,11 @@ echo "Next steps:"
 echo "  1. Run  bash $REPO_DIR/verify.sh  to confirm everything is healthy"
 echo "  2. Start ComfyUI:  bash $LAUNCHER"
 echo "  3. Look for these in startup log:"
-echo "       Using sage attention"
+echo "       Using async weight offloading with 2 streams       ← PR #10953 default"
 echo "       aimdo: comfy-aimdo inited for GPU: NVIDIA GB10"
 echo "       DynamicVRAM support detected and enabled"
+echo "       comfy-aimdo version: 0.3.0                         ← (or newer)"
 echo ""
 echo "After every \`git pull\` of ComfyUI core, re-run:"
-echo "  bash $COMFY/dgx_spark_patches.sh"
+echo "  bash $COMFY/dgx_spark_patches.sh    # only Patch 2 actually applies on modern ComfyUI"
 echo "(Idempotent — safe to run repeatedly. Will warn if upstream changed the lines we patch.)"
